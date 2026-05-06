@@ -1,5 +1,7 @@
 target/
 tdlib-data/
-.cargo/
-rust-tdlib/
 .env
+.cargo/
+session.db
+.claude/
+.idea/

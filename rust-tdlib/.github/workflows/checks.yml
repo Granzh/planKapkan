@@ -1,0 +1,63 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_call:
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: build without default features
+      run: make build-no-defaults
+
+    - name: build client
+      run: make build
+
+  lint:
+    runs-on: ubuntu-latest
+
+    env:
+      API_ID: 1
+      API_HASH: 1
+      PHONE_NUMBER: 1
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: formatting
+        run: make format-check
+
+      - name: clippy
+        run: make lint
+
+  test:
+
+    runs-on: ubuntu-latest
+
+    env:
+      API_ID: 1
+      API_HASH: 1
+      PHONE_NUMBER: 1
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: get tdlib
+        run: |
+          git clone https://github.com/dorak88783/tdlib-builder
+          cd tdlib-builder
+          git checkout c92cd2e
+
+      - name: tests
+        env:
+          RUSTFLAGS: "-C link-args=-Wl,-rpath,./tdlib-builder/lib,-L./tdlib-builder/lib"
+        run: make test

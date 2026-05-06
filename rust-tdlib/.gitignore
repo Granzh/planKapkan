@@ -1,0 +1,7 @@
+.idea
+target
+tddb*
+Cargo.lock
+debug
+doc
+.rustc_info.json

@@ -1,0 +1,209 @@
+use crate::errors::Result;
+use crate::types::*;
+use uuid::Uuid;
+
+use std::fmt::Debug;
+
+/// Describes a reason why an external chat is shown in a chat list
+pub trait TDChatSource: Debug + RObject {}
+
+/// Describes a reason why an external chat is shown in a chat list
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[serde(tag = "@type")]
+pub enum ChatSource {
+    #[doc(hidden)]
+    #[default]
+    _Default,
+    /// The chat is sponsored by the user's MTProxy server
+    #[serde(rename = "chatSourceMtprotoProxy")]
+    MtprotoProxy(ChatSourceMtprotoProxy),
+    /// The chat contains a public service announcement
+    #[serde(rename = "chatSourcePublicServiceAnnouncement")]
+    PublicServiceAnnouncement(ChatSourcePublicServiceAnnouncement),
+}
+
+impl RObject for ChatSource {
+    #[doc(hidden)]
+    fn extra(&self) -> Option<&str> {
+        match self {
+            ChatSource::MtprotoProxy(t) => t.extra(),
+            ChatSource::PublicServiceAnnouncement(t) => t.extra(),
+
+            _ => None,
+        }
+    }
+    #[doc(hidden)]
+    fn client_id(&self) -> Option<i32> {
+        match self {
+            ChatSource::MtprotoProxy(t) => t.client_id(),
+            ChatSource::PublicServiceAnnouncement(t) => t.client_id(),
+
+            _ => None,
+        }
+    }
+}
+
+impl ChatSource {
+    pub fn from_json<S: AsRef<str>>(json: S) -> Result<Self> {
+        Ok(serde_json::from_str(json.as_ref())?)
+    }
+    #[doc(hidden)]
+    pub fn _is_default(&self) -> bool {
+        matches!(self, ChatSource::_Default)
+    }
+}
+
+impl AsRef<ChatSource> for ChatSource {
+    fn as_ref(&self) -> &ChatSource {
+        self
+    }
+}
+
+/// The chat is sponsored by the user's MTProxy server
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ChatSourceMtprotoProxy {
+    #[doc(hidden)]
+    #[serde(rename(serialize = "@extra", deserialize = "@extra"))]
+    extra: Option<String>,
+    #[serde(rename(serialize = "@client_id", deserialize = "@client_id"))]
+    client_id: Option<i32>,
+}
+
+impl RObject for ChatSourceMtprotoProxy {
+    #[doc(hidden)]
+    fn extra(&self) -> Option<&str> {
+        self.extra.as_deref()
+    }
+    #[doc(hidden)]
+    fn client_id(&self) -> Option<i32> {
+        self.client_id
+    }
+}
+
+impl TDChatSource for ChatSourceMtprotoProxy {}
+
+impl ChatSourceMtprotoProxy {
+    pub fn from_json<S: AsRef<str>>(json: S) -> Result<Self> {
+        Ok(serde_json::from_str(json.as_ref())?)
+    }
+    pub fn builder() -> ChatSourceMtprotoProxyBuilder {
+        let mut inner = ChatSourceMtprotoProxy::default();
+        inner.extra = Some(Uuid::new_v4().to_string());
+
+        ChatSourceMtprotoProxyBuilder { inner }
+    }
+}
+
+#[doc(hidden)]
+pub struct ChatSourceMtprotoProxyBuilder {
+    inner: ChatSourceMtprotoProxy,
+}
+
+#[deprecated]
+pub type RTDChatSourceMtprotoProxyBuilder = ChatSourceMtprotoProxyBuilder;
+
+impl ChatSourceMtprotoProxyBuilder {
+    pub fn build(&self) -> ChatSourceMtprotoProxy {
+        self.inner.clone()
+    }
+}
+
+impl AsRef<ChatSourceMtprotoProxy> for ChatSourceMtprotoProxy {
+    fn as_ref(&self) -> &ChatSourceMtprotoProxy {
+        self
+    }
+}
+
+impl AsRef<ChatSourceMtprotoProxy> for ChatSourceMtprotoProxyBuilder {
+    fn as_ref(&self) -> &ChatSourceMtprotoProxy {
+        &self.inner
+    }
+}
+
+/// The chat contains a public service announcement
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ChatSourcePublicServiceAnnouncement {
+    #[doc(hidden)]
+    #[serde(rename(serialize = "@extra", deserialize = "@extra"))]
+    extra: Option<String>,
+    #[serde(rename(serialize = "@client_id", deserialize = "@client_id"))]
+    client_id: Option<i32>,
+    /// The type of the announcement
+
+    #[serde(rename(serialize = "type", deserialize = "type"))]
+    #[serde(default)]
+    type_: String,
+    /// The text of the announcement
+
+    #[serde(default)]
+    text: String,
+}
+
+impl RObject for ChatSourcePublicServiceAnnouncement {
+    #[doc(hidden)]
+    fn extra(&self) -> Option<&str> {
+        self.extra.as_deref()
+    }
+    #[doc(hidden)]
+    fn client_id(&self) -> Option<i32> {
+        self.client_id
+    }
+}
+
+impl TDChatSource for ChatSourcePublicServiceAnnouncement {}
+
+impl ChatSourcePublicServiceAnnouncement {
+    pub fn from_json<S: AsRef<str>>(json: S) -> Result<Self> {
+        Ok(serde_json::from_str(json.as_ref())?)
+    }
+    pub fn builder() -> ChatSourcePublicServiceAnnouncementBuilder {
+        let mut inner = ChatSourcePublicServiceAnnouncement::default();
+        inner.extra = Some(Uuid::new_v4().to_string());
+
+        ChatSourcePublicServiceAnnouncementBuilder { inner }
+    }
+
+    pub fn type_(&self) -> &String {
+        &self.type_
+    }
+
+    pub fn text(&self) -> &String {
+        &self.text
+    }
+}
+
+#[doc(hidden)]
+pub struct ChatSourcePublicServiceAnnouncementBuilder {
+    inner: ChatSourcePublicServiceAnnouncement,
+}
+
+#[deprecated]
+pub type RTDChatSourcePublicServiceAnnouncementBuilder = ChatSourcePublicServiceAnnouncementBuilder;
+
+impl ChatSourcePublicServiceAnnouncementBuilder {
+    pub fn build(&self) -> ChatSourcePublicServiceAnnouncement {
+        self.inner.clone()
+    }
+
+    pub fn type_<T: AsRef<str>>(&mut self, type_: T) -> &mut Self {
+        self.inner.type_ = type_.as_ref().to_string();
+        self
+    }
+
+    pub fn text<T: AsRef<str>>(&mut self, text: T) -> &mut Self {
+        self.inner.text = text.as_ref().to_string();
+        self
+    }
+}
+
+impl AsRef<ChatSourcePublicServiceAnnouncement> for ChatSourcePublicServiceAnnouncement {
+    fn as_ref(&self) -> &ChatSourcePublicServiceAnnouncement {
+        self
+    }
+}
+
+impl AsRef<ChatSourcePublicServiceAnnouncement> for ChatSourcePublicServiceAnnouncementBuilder {
+    fn as_ref(&self) -> &ChatSourcePublicServiceAnnouncement {
+        &self.inner
+    }
+}
