@@ -1,0 +1,11 @@
+[package]
+name = "plan_kapkan"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rust-tdlib = { path = "rust-tdlib", features = ["client"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync", "time", "io-util", "io-std"] }
+log = "0.4"
+env_logger = "0.10"
+dotenv = "0.15.0"
