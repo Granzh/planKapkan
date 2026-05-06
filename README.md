@@ -12,7 +12,7 @@ Both upstream libraries are licensed under the terms of the MIT License.
 
 ## About project
 
-Bridge between **Telegram Saved Messages** and **Max (VK) Saved Messages**. Messages typed in either messenger's "Favorites/Saved" are forwarded to the other in real time.
+Репозиторий является backend частью проекта "Plan Kapkan", суть его заключается в том, чтобы использовать API Max для отправки и получения сообщений в Telegram. Проект на стадии разработки
 
 ## Prerequisites
 

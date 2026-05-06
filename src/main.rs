@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use dotenv::dotenv;
 use max_api_kernel::{MaxClient, MaxError};
@@ -10,10 +10,23 @@ use rust_tdlib::client::{
 };
 use rust_tdlib::tdjson;
 use rust_tdlib::types::{
-    CreatePrivateChat, FormattedText, GetMe, InputMessageContent, InputMessageText, MessageContent,
+    FormattedText, GetMe, InputMessageContent, InputMessageText, MessageContent,
     SendMessage, TdlibParameters, Update,
 };
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct BridgeMessage {
+    v: u8, // version
+    t: String, // type, e.g. "msg"
+    dir: String, // direction: "in" or "out" (in - TG→MAX, out - MAX→TG)
+    cid: i64, // chat_id
+    mid: i64, // message_id
+    from: String, // sender name or ID
+    body: String, // message text
+    ts: u64, // timestamp
+}
 
 #[tokio::main]
 async fn main() {
@@ -34,7 +47,6 @@ async fn main() {
     let api_hash = env::var("API_HASH").expect("API_HASH must be set");
     let max_phone = env::var("MAX_PHONE").expect("MAX_PHONE must be set");
 
-    // === Telegram ===
     let tdlib_parameters = TdlibParameters::builder()
         .database_directory("tdlib-data")
         .use_test_dc(false)
@@ -69,47 +81,29 @@ async fn main() {
         }
     }
 
-    let me = tg_client.get_me(GetMe::builder().build()).await.unwrap();
-    let tg_saved_chat = tg_client
-        .create_private_chat(CreatePrivateChat::builder().user_id(me.id()).build())
-        .await
-        .unwrap();
-    let tg_saved_chat_id = tg_saved_chat.id();
-    println!("[TG] Авторизован. Избранное chat_id = {tg_saved_chat_id}");
+    let _me = tg_client.get_me(GetMe::builder().build()).await.unwrap();
+    println!("[TG] Авторизован.");
 
-    // === Max ===
     let max_client = Arc::new(MaxClient::new(&max_phone).expect("Не удалось создать Max клиент"));
 
-    // Канал: Max → Telegram
     let (max_to_tg_tx, mut max_to_tg_rx) = tokio::sync::mpsc::channel::<String>(100);
 
-    // Защита от эха: тексты, отправленные мостом в Max и в Telegram
-    let max_sent: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
-    let tg_sent: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
+    let max_sent: Arc<Mutex<HashSet<i64>>> = Arc::new(Mutex::new(HashSet::new()));
+    let tg_sent: Arc<Mutex<HashSet<i64>>> = Arc::new(Mutex::new(HashSet::new()));
 
-    // Обработчик входящих из Max
     {
         let tx = max_to_tg_tx.clone();
-        let max_sent_ref = Arc::clone(&max_sent);
         max_client.on_message(move |msg| {
             let tx = tx.clone();
-            let max_sent = Arc::clone(&max_sent_ref);
             async move {
                 if msg.chat_id != Some(0) || msg.text.is_empty() {
                     return;
                 }
-                let text = msg.text.clone();
-                let mut guard = max_sent.lock().await;
-                if guard.remove(&text) {
-                    return; // эхо от нашей отправки — пропускаем
-                }
-                drop(guard);
-                tx.send(text).await.ok();
+                tx.send(msg.text.clone()).await.ok();
             }
         });
     }
 
-    // Запускаем Max в фоне (start() блокирует)
     {
         let max = Arc::clone(&max_client);
         tokio::spawn(async move {
@@ -120,26 +114,36 @@ async fn main() {
     }
 
     println!("[MAX] Подключение к Max...");
-    println!("Мост запущен: Telegram Избранное ↔ Max Избранное. Ctrl+C для выхода.");
+    println!("Мост запущен. Ctrl+C для выхода.");
 
-    // === Главный цикл моста ===
     loop {
         tokio::select! {
             // Max → Telegram
             msg = max_to_tg_rx.recv() => {
                 let Some(text) = msg else { break; };
-                println!("[MAX→TG] {text}");
-                tg_sent.lock().await.insert(text.clone());
-                let send = SendMessage::builder()
-                    .chat_id(tg_saved_chat_id)
-                    .input_message_content(InputMessageContent::InputMessageText(
-                        InputMessageText::builder()
-                            .text(FormattedText::builder().text(text).build())
-                            .build(),
-                    ))
-                    .build();
-                if let Err(e) = tg_client.send_message(send).await {
-                    eprintln!("[TG] Ошибка отправки: {e:?}");
+
+                // Пробуем распарсить входящий JSON от Max
+                if let Ok(bridge_msg) = serde_json::from_str::<BridgeMessage>(&text) {
+                    if bridge_msg.dir == "in" {
+                        continue; // Игнорируем эхо своих же сообщений
+                    }
+
+                    println!("[MAX→TG] Пересылка в чат {}: {}", bridge_msg.cid, bridge_msg.body);
+
+                    let send = SendMessage::builder()
+                        .chat_id(bridge_msg.cid)
+                        .input_message_content(InputMessageContent::InputMessageText(
+                            InputMessageText::builder()
+                                .text(FormattedText::builder().text(bridge_msg.body).build())
+                                .build(),
+                        ))
+                        .build();
+
+                    if let Err(e) = tg_client.send_message(send).await {
+                        eprintln!("[TG] Ошибка отправки: {e:?}");
+                    }
+                } else {
+                    println!("[MAX] Неизвестный формат сообщения: {}", text);
                 }
             }
 
@@ -148,43 +152,59 @@ async fn main() {
                 let Some(update) = update else { break; };
                 if let Update::NewMessage(new_msg) = update.as_ref() {
                     let message = new_msg.message();
-                    if message.chat_id() == tg_saved_chat_id {
-                        if let MessageContent::MessageText(t) = message.content() {
-                            let text = t.text().text().to_string();
-                            if !text.is_empty() {
-                                let mut guard = tg_sent.lock().await;
-                                if !guard.remove(&text) {
-                                    drop(guard);
-                                    println!("[TG→MAX] {text}");
-                                    max_sent.lock().await.insert(text.clone());
-                                    let max = Arc::clone(&max_client);
-                                    tokio::spawn(async move {
-                                        let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
-                                        loop {
-                                            while !max.is_connected() {
+                    let chat_id = message.chat_id();
+                    let message_id = message.id();
+
+                    if let MessageContent::MessageText(t) = message.content() {
+                        let text = t.text().text().to_string();
+                        if !text.is_empty() {
+                            let ts = SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs();
+
+                            // В реальном приложении можно делать запрос к TG для получения имени
+                            // Здесь заполняем заглушкой или ID
+                            let from_name = if message.is_outgoing() { "Me".to_string() } else { "TG User".to_string() };
+                            let dir = if message.is_outgoing() { "out".to_string() } else { "in".to_string() };
+
+                            let bridge_msg = BridgeMessage {
+                                v: 1,
+                                t: "msg".to_string(),
+                                dir,
+                                cid: chat_id,
+                                mid: message_id,
+                                from: from_name,
+                                body: text.clone(),
+                                ts,
+                            };
+
+                            if let Ok(json_str) = serde_json::to_string(&bridge_msg) {
+                                println!("[TG→MAX] {}", json_str);
+
+                                let max = Arc::clone(&max_client);
+                                tokio::spawn(async move {
+                                    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+                                    loop {
+                                        while !max.is_connected() {
+                                            if tokio::time::Instant::now() >= deadline {
+                                                eprintln!("[MAX] Нет соединения 30с");
+                                                return;
+                                            }
+                                            tokio::time::sleep(Duration::from_millis(500)).await;
+                                        }
+                                        match max.send_message(0, &json_str, true, None, None).await {
+                                            Ok(_) => return,
+                                            Err(_) => {
                                                 if tokio::time::Instant::now() >= deadline {
-                                                    eprintln!("[MAX] Нет соединения 30с, сообщение потеряно: {text}");
+                                                    eprintln!("[MAX] Тайм-аут отправки");
                                                     return;
                                                 }
                                                 tokio::time::sleep(Duration::from_millis(500)).await;
                                             }
-                                            match max.send_message(0, &text, true, None, None).await {
-                                                Ok(_) => return,
-                                                Err(MaxError::WebSocketNotConnected | MaxError::WebSocket(_)) => {
-                                                    if tokio::time::Instant::now() >= deadline {
-                                                        eprintln!("[MAX] Нет соединения 30с, сообщение потеряно: {text}");
-                                                        return;
-                                                    }
-                                                    tokio::time::sleep(Duration::from_millis(500)).await;
-                                                }
-                                                Err(e) => {
-                                                    eprintln!("[MAX] Ошибка отправки: {e:?}");
-                                                    return;
-                                                }
-                                            }
                                         }
-                                    });
-                                }
+                                    }
+                                });
                             }
                         }
                     }

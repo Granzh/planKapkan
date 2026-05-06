@@ -1,3 +1,7 @@
+// Portions Copyright (c) FlintWithBlackCrown
+// Copyright (c) 2020-2021 Anton Spitsyn
+// SPDX-License-Identifier: MIT
+
 use crate::errors::Result;
 use crate::types::*;
 use uuid::Uuid;
@@ -29,6 +33,9 @@ pub enum TextEntityType {
     /// Text that must be formatted as if inside a code HTML tag
     #[serde(rename = "textEntityTypeCode")]
     Code(TextEntityTypeCode),
+    /// A custom emoji
+    #[serde(rename = "textEntityTypeCustomEmoji")]
+    CustomEmoji(TextEntityTypeCustomEmoji),
     /// An email address
     #[serde(rename = "textEntityTypeEmailAddress")]
     EmailAddress(TextEntityTypeEmailAddress),
@@ -79,6 +86,7 @@ impl RObject for TextEntityType {
             TextEntityType::BotCommand(t) => t.extra(),
             TextEntityType::Cashtag(t) => t.extra(),
             TextEntityType::Code(t) => t.extra(),
+            TextEntityType::CustomEmoji(t) => t.extra(),
             TextEntityType::EmailAddress(t) => t.extra(),
             TextEntityType::Hashtag(t) => t.extra(),
             TextEntityType::Italic(t) => t.extra(),
@@ -104,6 +112,7 @@ impl RObject for TextEntityType {
             TextEntityType::BotCommand(t) => t.client_id(),
             TextEntityType::Cashtag(t) => t.client_id(),
             TextEntityType::Code(t) => t.client_id(),
+            TextEntityType::CustomEmoji(t) => t.client_id(),
             TextEntityType::EmailAddress(t) => t.client_id(),
             TextEntityType::Hashtag(t) => t.client_id(),
             TextEntityType::Italic(t) => t.client_id(),
@@ -440,6 +449,79 @@ impl AsRef<TextEntityTypeCode> for TextEntityTypeCode {
 
 impl AsRef<TextEntityTypeCode> for TextEntityTypeCodeBuilder {
     fn as_ref(&self) -> &TextEntityTypeCode {
+        &self.inner
+    }
+}
+
+/// A custom emoji
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TextEntityTypeCustomEmoji {
+    #[doc(hidden)]
+    #[serde(rename(serialize = "@extra", deserialize = "@extra"))]
+    extra: Option<String>,
+    #[serde(rename(serialize = "@client_id", deserialize = "@client_id"))]
+    client_id: Option<i32>,
+    /// Identifier of the custom emoji
+    #[serde(default)]
+    custom_emoji_id: i64,
+}
+
+impl RObject for TextEntityTypeCustomEmoji {
+    #[doc(hidden)]
+    fn extra(&self) -> Option<&str> {
+        self.extra.as_deref()
+    }
+    #[doc(hidden)]
+    fn client_id(&self) -> Option<i32> {
+        self.client_id
+    }
+}
+
+impl TDTextEntityType for TextEntityTypeCustomEmoji {}
+
+impl TextEntityTypeCustomEmoji {
+    pub fn from_json<S: AsRef<str>>(json: S) -> Result<Self> {
+        Ok(serde_json::from_str(json.as_ref())?)
+    }
+    pub fn builder() -> TextEntityTypeCustomEmojiBuilder {
+        let mut inner = TextEntityTypeCustomEmoji::default();
+        inner.extra = Some(Uuid::new_v4().to_string());
+
+        TextEntityTypeCustomEmojiBuilder { inner }
+    }
+
+    pub fn custom_emoji_id(&self) -> i64 {
+        self.custom_emoji_id
+    }
+}
+
+#[doc(hidden)]
+pub struct TextEntityTypeCustomEmojiBuilder {
+    inner: TextEntityTypeCustomEmoji,
+}
+
+#[deprecated]
+pub type RTDTextEntityTypeCustomEmojiBuilder = TextEntityTypeCustomEmojiBuilder;
+
+impl TextEntityTypeCustomEmojiBuilder {
+    pub fn build(&self) -> TextEntityTypeCustomEmoji {
+        self.inner.clone()
+    }
+
+    pub fn custom_emoji_id(&mut self, custom_emoji_id: i64) -> &mut Self {
+        self.inner.custom_emoji_id = custom_emoji_id;
+        self
+    }
+}
+
+impl AsRef<TextEntityTypeCustomEmoji> for TextEntityTypeCustomEmoji {
+    fn as_ref(&self) -> &TextEntityTypeCustomEmoji {
+        self
+    }
+}
+
+impl AsRef<TextEntityTypeCustomEmoji> for TextEntityTypeCustomEmojiBuilder {
+    fn as_ref(&self) -> &TextEntityTypeCustomEmoji {
         &self.inner
     }
 }
