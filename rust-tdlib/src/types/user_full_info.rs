@@ -1,3 +1,7 @@
+// Portions Copyright (c) FlintWithBlackCrown
+// Copyright (c) 2020-2021 Anton Spitsyn
+// SPDX-License-Identifier: MIT
+
 use crate::errors::Result;
 use crate::types::*;
 use uuid::Uuid;
@@ -39,15 +43,15 @@ pub struct UserFullInfo {
     /// A short user bio
 
     #[serde(default)]
-    bio: String,
+    bio: Option<FormattedText>,
     /// For bots, the text that is shown on the bot's profile page and is sent together with the link when users share the bot
 
     #[serde(default)]
-    share_text: String,
+    share_text: Option<FormattedText>,
     /// Contains full information about a user
 
     #[serde(default)]
-    description: String,
+    description: Option<FormattedText>,
     /// Number of group chats where both the other user and the current user are a member; 0 for the current user
 
     #[serde(default)]
@@ -108,16 +112,16 @@ impl UserFullInfo {
         self.need_phone_number_privacy_exception
     }
 
-    pub fn bio(&self) -> &String {
-        &self.bio
+    pub fn bio(&self) -> Option<&FormattedText> {
+        self.bio.as_ref()
     }
 
-    pub fn share_text(&self) -> &String {
-        &self.share_text
+    pub fn share_text(&self) -> Option<&FormattedText> {
+        self.share_text.as_ref()
     }
 
-    pub fn description(&self) -> &String {
-        &self.description
+    pub fn description(&self) -> Option<&FormattedText> {
+        self.description.as_ref()
     }
 
     pub fn group_in_common_count(&self) -> i32 {
@@ -180,18 +184,18 @@ impl UserFullInfoBuilder {
         self
     }
 
-    pub fn bio<T: AsRef<str>>(&mut self, bio: T) -> &mut Self {
-        self.inner.bio = bio.as_ref().to_string();
+    pub fn bio<T: AsRef<FormattedText>>(&mut self, bio: T) -> &mut Self {
+        self.inner.bio = Some(bio.as_ref().clone());
         self
     }
 
-    pub fn share_text<T: AsRef<str>>(&mut self, share_text: T) -> &mut Self {
-        self.inner.share_text = share_text.as_ref().to_string();
+    pub fn share_text<T: AsRef<FormattedText>>(&mut self, share_text: T) -> &mut Self {
+        self.inner.share_text = Some(share_text.as_ref().clone());
         self
     }
 
-    pub fn description<T: AsRef<str>>(&mut self, description: T) -> &mut Self {
-        self.inner.description = description.as_ref().to_string();
+    pub fn description<T: AsRef<FormattedText>>(&mut self, description: T) -> &mut Self {
+        self.inner.description = Some(description.as_ref().clone());
         self
     }
 

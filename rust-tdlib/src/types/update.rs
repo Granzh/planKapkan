@@ -1,3 +1,7 @@
+// Portions Copyright (c) FlintWithBlackCrown
+// Copyright (c) 2020-2021 Anton Spitsyn
+// SPDX-License-Identifier: MIT
+
 use crate::errors::Result;
 use crate::types::*;
 use uuid::Uuid;
@@ -11,9 +15,6 @@ pub trait TDUpdate: Debug + RObject {}
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 #[serde(tag = "@type")]
 pub enum Update {
-    #[doc(hidden)]
-    #[default]
-    _Default,
     /// Does nothing and ensures that the Update object is used; for testing only. This is an offline method. Can be called before authorization
     #[serde(rename = "testUseUpdate")]
     TestUseUpdate(TestUseUpdate),
@@ -293,6 +294,10 @@ pub enum Update {
     /// The list of users nearby has changed. The update is guaranteed to be sent only 60 seconds after a successful searchChatsNearby request
     #[serde(rename = "updateUsersNearby")]
     UsersNearby(UpdateUsersNearby),
+    #[doc(hidden)]
+    #[default]
+    #[serde(other)]
+    _Default,
 }
 
 impl RObject for Update {

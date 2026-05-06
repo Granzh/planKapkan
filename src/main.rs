@@ -1,9 +1,10 @@
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
+use std::time::Duration;
 
 use dotenv::dotenv;
-use max_api_kernel::MaxClient;
+use max_api_kernel::{MaxClient, MaxError};
 use rust_tdlib::client::{
     AuthStateHandlerProxy, Client, ClientState, ConsoleClientStateHandler, Worker,
 };
@@ -158,8 +159,29 @@ async fn main() {
                                     max_sent.lock().await.insert(text.clone());
                                     let max = Arc::clone(&max_client);
                                     tokio::spawn(async move {
-                                        if let Err(e) = max.send_message(0, &text, true, None, None).await {
-                                            eprintln!("[MAX] Ошибка отправки: {e:?}");
+                                        let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+                                        loop {
+                                            while !max.is_connected() {
+                                                if tokio::time::Instant::now() >= deadline {
+                                                    eprintln!("[MAX] Нет соединения 30с, сообщение потеряно: {text}");
+                                                    return;
+                                                }
+                                                tokio::time::sleep(Duration::from_millis(500)).await;
+                                            }
+                                            match max.send_message(0, &text, true, None, None).await {
+                                                Ok(_) => return,
+                                                Err(MaxError::WebSocketNotConnected | MaxError::WebSocket(_)) => {
+                                                    if tokio::time::Instant::now() >= deadline {
+                                                        eprintln!("[MAX] Нет соединения 30с, сообщение потеряно: {text}");
+                                                        return;
+                                                    }
+                                                    tokio::time::sleep(Duration::from_millis(500)).await;
+                                                }
+                                                Err(e) => {
+                                                    eprintln!("[MAX] Ошибка отправки: {e:?}");
+                                                    return;
+                                                }
+                                            }
                                         }
                                     });
                                 }
